@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Pattern Recall</title>
+    <style>
+        :root {
+            --bg: #0d1117;
+            --panel: #161b22;
+            --accent: #00e5ff;
+            --accent-glow: rgba(0, 229, 255, 0.4);
+            --text: #f0f6fc;
+            --subtext: #8b949e;
+            --tile-bg: #21262d;
+            --tile-border: #30363d;
+            --error: #ff4d4d;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            background-color: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        #confetti-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        .game-container {
+            background-color: var(--panel);
+            border: 1px solid var(--tile-border);
+            border-radius: 16px;
+            padding: 24px;
+            width: 100%;
+            max-width: 420px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+            text-align: center;
+            z-index: 1;
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            color: var(--accent);
+            margin-bottom: 12px;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+        }
+
+        .controls-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 14px;
+        }
+
+        .pill-group {
+            display: flex;
+            background: var(--bg);
+            border: 1px solid var(--tile-border);
+            border-radius: 8px;
+            padding: 3px;
+        }
+
+        .pill-btn {
+            background: transparent;
+            border: none;
+            color: var(--subtext);
+            padding: 4px 12px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            border-radius: 6px;
+            transition: all 0.2s;
+        }
+
+        .pill-btn.active {
+            background: var(--tile-bg);
+            color: var(--accent);
+            font-weight: bold;
+        }
+
+        .stats-bar {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 6px;
+            margin-bottom: 16px;
+            background: var(--bg);
+            padding: 10px 4px;
+            border-radius: 10px;
+            border: 1px solid var(--tile-border);
+        }
+
+        .stat {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .stat-label {
+            font-size: 0.65rem;
+            color: var(--subtext);
+            text-transform: uppercase;
+        }
+
+        .stat-value {
+            font-size: 1.1rem;
+            font-weight: bold;
+        }
+
+        .grid {
+            display: grid;
+            gap: 10px;
+            margin-bottom: 18px;
+            transition: opacity 0.2s;
+        }
+
+        .grid.grid-3 {
+            grid-template-columns: repeat(3, 1fr);
+        }
+
+        .grid.grid-4 {
+            grid-template-columns: repeat(4, 1fr);
+            gap: 8px;
+        }
+
+        .grid.disabled {
+            pointer-events: none;
+            opacity: 0.8;
+        }
+
+        .tile {
+            aspect-ratio: 1;
+            background-color: var(--tile-bg);
+            border: 2px solid var(--tile-border);
+            border-radius: 10px;
+            cursor: pointer;
+            transition: transform 0.08s, background-color 0.15s, box-shadow 0.15s;
+        }
+
+        .tile:active {
+            transform: scale(0.94);
+        }
+
+        .tile.active {
+            background-color: var(--accent) !important;
+            border-color: #fff !important;
+            box-shadow: 0 0 20px var(--accent-glow);
+        }
+
+        .tile.error {
+            background-color: var(--error) !important;
+            border-color: #fff !important;
+            box-shadow: 0 0 20px rgba(255, 77, 77, 0.6);
+        }
+
+        .status {
+            font-size: 0.9rem;
+            color: var(--subtext);
+            min-height: 22px;
+            margin-bottom: 16px;
+            font-weight: 500;
+        }
+
+        .btn {
+            background: var(--accent);
+            color: #000;
+            border: none;
+            padding: 12px 24px;
+            font-size: 0.95rem;
+            font-weight: bold;
+            border-radius: 8px;
+            cursor: pointer;
+            width: 100%;
+            transition: opacity 0.2s, transform 0.1s;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="confetti-canvas"></canvas>
+
+    <div class="game-container">
+        <h1>Pattern Recall</h1>
+
+        <div class="controls-row">
+            <span class="stat-label">Grid Mode</span>
+            <div class="pill-group" id="size-toggle">
+                <button class="pill-btn active" data-size="3">3 × 3</button>
+                <button class="pill-btn" data-size="4">4 × 4</button>
+            </div>
+        </div>
+
+        <div class="stats-bar">
+            <div class="stat">
+                <span class="stat-label">Level</span>
+                <span class="stat-value" id="level">1</span>
+            </div>
+            <div class="stat">
+                <span class="stat-label">Score</span>
+                <span class="stat-value" id="score">0</span>
+            </div>
+            <div class="stat">
+                <span class="stat-label">Mult</span>
+                <span class="stat-value" id="multiplier">1x</span>
+            </div>
+            <div class="stat">
+                <span class="stat-label">Best</span>
+                <span class="stat-value" id="high-score">0</span>
+            </div>
+        </div>
+
+        <div class="status" id="status">Press Start to Play</div>
+        <div class="grid grid-3 disabled" id="grid"></div>
+        <button class="btn" id="start-btn">Start Game</button>
+    </div>
+
+    <script>
+        const gridEl = document.getElementById('grid');
+        const levelEl = document.getElementById('level');
+        const scoreEl = document.getElementById('score');
+        const multiplierEl = document.getElementById('multiplier');
+        const highScoreEl = document.getElementById('high-score');
+        const statusEl = document.getElementById('status');
+        const startBtn = document.getElementById('start-btn');
+        const sizeToggle = document.getElementById('size-toggle');
+        const canvas = document.getElementById('confetti-canvas');
+        const ctx = canvas.getContext('2d');
+
+        let gridSize = 3;
+        let sequence = [];
+        let playerStep = 0;
+        let level = 1;
+        let score = 0;
+        let streak = 0;
+        let isPlaying = false;
+        let canTap = false;
+        let activeTimeouts = [];
+
+        const BASE_FREQS = [261.63, 293.66, 329.63, 349.23, 392.00, 440.00, 493.88, 523.25, 587.33, 659.25, 698.46, 783.99, 880.00, 987.77, 1046.50, 1174.66];
+        let highScore = parseInt(localStorage.getItem(`pattern_recall_high_${gridSize}`) || '0', 10);
+        highScoreEl.textContent = highScore;
+
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        let audioCtx = null;
+        function getAudioContext() {
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            return audioCtx;
+        }
+
+        function playTone(freq, type = 'sine', duration = 0.15) {
+            try {
+                const ac = getAudioContext();
+                const osc = ac.createOscillator();
+                const gain = ac.createGain();
+                osc.type = type;
+                osc.frequency.setValueAtTime(freq, ac.currentTime);
+                osc.connect(gain);
+                gain.connect(ac.destination);
+                gain.gain.setValueAtTime(0.2, ac.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + duration);
+                osc.start();
+                osc.stop(ac.currentTime + duration);
+            } catch (e) {}
+        }
+
+        let particles = [];
+        function triggerConfetti() {
+            for (let i = 0; i < 35; i++) {
+                particles.push({
+                    x: canvas.width / 2,
+                    y: canvas.height / 2,
+                    vx: (Math.random() - 0.5) * 10,
+                    vy: (Math.random() - 0.5) * 10 - 2,
+                    size: Math.random() * 5 + 3,
+                    color: ['#00e5ff', '#38ef7d', '#ff007f', '#ffd700'][Math.floor(Math.random() * 4)],
+                    alpha: 1,
+                    decay: Math.random() * 0.03 + 0.015
+                });
+            }
+        }
+
+        function updateParticles() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            particles.forEach((p, idx) => {
+                p.x += p.vx;
+                p.y += p.vy;
+                p.vy += 0.2;
+                p.alpha -= p.decay;
+                ctx.save();
+                ctx.globalAlpha = Math.max(0, p.alpha);
+                ctx.fillStyle = p.color;
+                ctx.fillRect(p.x, p.y, p.size, p.size);
+                ctx.restore();
+                if (p.alpha <= 0) particles.splice(idx, 1);
+            });
+            requestAnimationFrame(updateParticles);
+        }
+        requestAnimationFrame(updateParticles);
+
+        function safeTimeout(fn, delay) {
+            const id = setTimeout(() => {
+                activeTimeouts = activeTimeouts.filter(t => t !== id);
+                fn();
+            }, delay);
+            activeTimeouts.push(id);
+            return id;
+        }
+
+        function clearAllTimeouts() {
+            activeTimeouts.forEach(clearTimeout);
+            activeTimeouts = [];
+        }
+
+        function buildGrid() {
+            gridEl.innerHTML = '';
+            gridEl.className = `grid grid-${gridSize} disabled`;
+            const total = gridSize * gridSize;
+            for (let i = 0; i < total; i++) {
+                const tile = document.createElement('div');
+                tile.className = 'tile';
+                tile.dataset.index = i;
+                tile.addEventListener('click', () => handleTileClick(i));
+                gridEl.appendChild(tile);
+            }
+        }
+        buildGrid();
+
+        sizeToggle.addEventListener('click', (e) => {
+            if (isPlaying || !e.target.dataset.size) return;
+            gridSize = parseInt(e.target.dataset.size, 10);
+            sizeToggle.querySelectorAll('.pill-btn').forEach(b => b.classList.remove('active'));
+            e.target.classList.add('active');
+            highScore = parseInt(localStorage.getItem(`pattern_recall_high_${gridSize}`) || '0', 10);
+            highScoreEl.textContent = highScore;
+            buildGrid();
+        });
+
+        startBtn.addEventListener('click', () => {
+            getAudioContext();
+            startGame();
+        });
+
+        function startGame() {
+            clearAllTimeouts();
+            sequence = [];
+            level = 1;
+            score = 0;
+            streak = 0;
+            isPlaying = true;
+
+            levelEl.textContent = level;
+            scoreEl.textContent = score;
+            multiplierEl.textContent = '1x';
+            startBtn.disabled = true;
+            nextRound();
+        }
+
+        function nextRound() {
+            playerStep = 0;
+            canTap = false;
+            gridEl.classList.add('disabled');
+            statusEl.textContent = "Watch carefully...";
+
+            sequence.push(Math.floor(Math.random() * (gridSize * gridSize)));
+            const stepDelay = Math.max(220, 550 - (level * 20));
+
+            sequence.forEach((tileIdx, idx) => {
+                safeTimeout(() => {
+                    flashTile(tileIdx, false, stepDelay * 0.6);
+                }, (idx + 1) * stepDelay);
+            });
+
+            safeTimeout(() => {
+                canTap = true;
+                gridEl.classList.remove('disabled');
+                statusEl.textContent = "Your turn!";
+            }, (sequence.length + 1) * stepDelay);
+        }
+
+        function flashTile(index, isError = false, customDuration = 250) {
+            const tile = gridEl.children[index];
+            if (!tile) return;
+
+            if (isError) {
+                tile.classList.add('error');
+                playTone(130, 'sawtooth', 0.35);
+                safeTimeout(() => tile.classList.remove('error'), 400);
+            } else {
+                tile.classList.add('active');
+                playTone(BASE_FREQS[index % BASE_FREQS.length], 'sine', customDuration / 1000);
+                safeTimeout(() => tile.classList.remove('active'), customDuration);
+            }
+        }
+
+        function handleTileClick(index) {
+            if (!canTap || !isPlaying) return;
+
+            if (index === sequence[playerStep]) {
+                flashTile(index, false, 200);
+                playerStep++;
+                streak++;
+
+                const mult = Math.min(4, 1 + Math.floor(streak / 5));
+                score += 10 * mult;
+                scoreEl.textContent = score;
+                multiplierEl.textContent = `${mult}x`;
+
+                if (playerStep === sequence.length) {
+                    canTap = false;
+                    level++;
+                    levelEl.textContent = level;
+
+                    if (score > highScore) {
+                        highScore = score;
+                        highScoreEl.textContent = highScore;
+                        localStorage.setItem(`pattern_recall_high_${gridSize}`, highScore);
+                    }
+
+                    triggerConfetti();
+                    statusEl.textContent = "Great! Next round...";
+                    safeTimeout(nextRound, 900);
+                }
+            } else {
+                flashTile(index, true);
+                gameOver();
+            }
+        }
+
+        function gameOver() {
+            canTap = false;
+            isPlaying = false;
+            gridEl.classList.add('disabled');
+            statusEl.textContent = `Game Over! Final Score: ${score}`;
+            startBtn.disabled = false;
+            startBtn.textContent = "Play Again";
+        }
+    </script>
+</body>
+  </html>
